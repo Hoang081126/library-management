@@ -62,17 +62,30 @@ try { Invoke-WebRequest http://localhost:8081/__loki_probe_404 -UseBasicParsing 
 
 Promtail chỉ đọc container thuộc Compose project **library-management**. Promtail đã hết hỗ trợ từ 02/03/2026; giữ theo yêu cầu đề tài, cần thay bằng Grafana Alloy khi bảo trì.
 
-## Ảnh cần chụp cuối cùng
+## Ảnh minh chứng hiện có và còn thiếu
 
-- Trang tổng quan website sau đăng nhập, các số liệu nhìn rõ.
-- Bảng sách thể hiện số lượng còn; bảng độc giả.
-- Sổ mượn trả thể hiện ít nhất một lượt đang mượn và một lượt đã trả.
-- pgAdmin hiển thị database **library_db** và bốn bảng nghiệp vụ.
-- Response headers của **/login** qua Nginx hoặc kết quả **curl -I**.
-- **docker compose ps** cho thấy health trạng thái DB/web/Nginx và các cổng chỉ bind loopback.
-- Prometheus **Targets** với 5 target UP.
-- Dashboard **Library Monitoring** có dữ liệu container, web, database.
-- Grafana Explore: marker URI và truy vấn regex status 4xx/5xx có kết quả 404.
-- Terminal minh họa **id** của web user và role PostgreSQL runtime cùng các cờ elevated **false**.
+Ảnh trong `docs/screenshots` đã được xem trực tiếp. Những ảnh được commit là ảnh PNG hợp lệ; ảnh nguồn AVIF gắn nhầm đuôi `.png` đã được chuyển định dạng không đổi nội dung. Danh sách ảnh được đưa lên repo:
 
-Chưa có ảnh nào được tạo hoặc chụp trong lần kiểm chứng này. Danh sách trên là danh sách ảnh cần chụp thật khi chuẩn bị báo cáo/demo.
+- `02-quan-ly-sach.png`: bảng sách và số lượng còn.
+- `04-muon-tra.png`: sổ mượn trả, hiện chỉ thấy lượt đã trả.
+- `05-pgadmin.png`: database `library_db` và bốn bảng nghiệp vụ.
+- `06-docker-compose.png`: terminal tạo admin và trạng thái Compose; phần ánh xạ cổng không đọc rõ.
+- `07-prometheus-targets.png`: 5 target Prometheus UP.
+- `08-grafana-container.png`, `09-grafana-web.png`, `10-grafana-database.png`: dashboard Library Monitoring.
+- `11-loki-logs.png`, `12-loki-404.png`, `13-loki-count.png`: Explore log, marker URI và truy vấn đếm theo thời gian.
+- `15-web-non-root.png`: UID/GID của tiến trình web.
+- `16-github-commits.png`: lịch sử GitHub trước commit ảnh này.
+
+Các ảnh còn lại được giữ ngoài commit: `01-tong-quan.png` trùng hoàn toàn với ảnh sách; `03-doc-gia.png` hiển thị thông tin liên hệ; `14-nginx-headers.avif` hiển thị giá trị cookie phiên trong header `Set-Cookie`. Không chia sẻ ảnh chứa thông tin này.
+
+Minh chứng còn thiếu hoặc chưa đủ:
+
+- Trang tổng quan sau đăng nhập: chưa có ảnh.
+- Bảng độc giả: chưa có ảnh an toàn để chia sẻ.
+- Sổ mượn trả có cả lượt đang mượn và đã trả: ảnh hiện tại chỉ cho thấy lượt đã trả.
+- Security headers Nginx: chưa có ảnh an toàn; chụp lại và che giá trị cookie trước khi chia sẻ.
+- Compose health và ánh xạ cổng loopback đọc rõ: ảnh hiện có chưa thể hiện rõ cột cổng.
+- Grafana Explore lọc status HTTP 4xx/5xx thực tế có kết quả: ảnh marker URI không thay thế truy vấn lọc status.
+- Terminal thể hiện role PostgreSQL runtime và các cờ elevated đều `false`: chưa có ảnh.
+
+Ảnh chỉ là minh chứng trực quan cho nội dung thấy được trên màn hình; chúng không thay thế các kiểm thử nghiệp vụ và kiểm tra cấu hình được ghi trong [VERIFICATION.md](VERIFICATION.md).

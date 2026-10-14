@@ -125,5 +125,5 @@ Sau kiểm tra, dừng đúng project scratch bằng **docker compose -p $projec
 
 - cAdvisor vẫn **privileged** và mount metadata host/Docker để thu container metrics. Promtail cần Docker socket; mount **:ro** không biến API socket thành quyền chỉ đọc. Đây là các ngoại lệ quyền cao của monitoring/log collector.
 - PostgreSQL, Prometheus, Grafana, Loki và Promtail cần đường ghi dữ liệu/position trên volume; web/exporter phù hợp hơn với root filesystem read-only.
-- Không chạy CRUD test trên dữ liệu production. Chưa mở browser để đánh giá dashboard trực quan hoặc chụp ảnh. Không phát sinh HTTP 5xx trong production; regex LogQL được xác nhận bằng response 404 thật.
+- Không chạy CRUD test trên dữ liệu production. Đã có ảnh chụp trực quan một số trang web và màn hình giám sát; danh sách ảnh an toàn để chia sẻ cùng các minh chứng còn thiếu được ghi trong [DEMO.md](DEMO.md). Ảnh không xác nhận các kiểm thử nghiệp vụ chưa chạy. Không phát sinh HTTP 5xx trong production; regex LogQL được xác nhận bằng response 404 thật.
 - Promtail đã EOL ngày 02/03/2026; giữ theo yêu cầu đề tài. Xem [Grafana Promtail EOL](https://grafana.com/docs/loki/latest/send-data/promtail/) và lên kế hoạch chuyển sang Alloy.
