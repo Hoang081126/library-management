@@ -12,22 +12,39 @@ Kiến trúc hiện tại có Nginx làm reverse proxy duy nhất:
 
 ## Chạy website
 
-1. Đảm bảo Docker Desktop đang chạy và các biến PostgreSQL/pgAdmin hiện có trong `.env` vẫn đúng. Không ghi đè `.env` hiện tại bằng file mẫu.
-2. Khóa phiên Flask được giữ trong `.env`. Nếu chưa có, thêm khóa ngẫu nhiên riêng vào đó, ví dụ tạo bằng PowerShell:
+1. Đảm bảo Docker Desktop đang chạy và các biến PostgreSQL/pgAdmin hiện có trong `.env` vẫn đúng. Trên máy mới, chỉ khi chưa có `.env`, hãy sao chép `.env.example` rồi thay tất cả giá trị `replace-with-...` bằng giá trị riêng. Không ghi đè `.env` hiện tại bằng file mẫu.
+2. Khóa phiên Flask và mật khẩu DB của role ứng dụng nằm trong `.env`. Nếu còn thiếu, có thể thêm bằng PowerShell; đoạn sau tạo hai giá trị ngẫu nhiên độc lập, mỗi giá trị 32 byte, mà không in chúng:
 
    ```powershell
    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
-   [byte[]]$bytes = New-Object byte[] 32
-   $rng.GetBytes($bytes)
-   $key = ([BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
-   Add-Content .env "FLASK_SECRET_KEY=$key"
+   [byte[]]$flaskBytes = New-Object byte[] 32
+   [byte[]]$appBytes = New-Object byte[] 32
+   $rng.GetBytes($flaskBytes)
+   $rng.GetBytes($appBytes)
+   $flaskKey = ([BitConverter]::ToString($flaskBytes) -replace '-', '').ToLowerInvariant()
+   $appPassword = ([BitConverter]::ToString($appBytes) -replace '-', '').ToLowerInvariant()
+   if (-not (Select-String -Path .env -Pattern '^FLASK_SECRET_KEY=' -Quiet)) { Add-Content .env "FLASK_SECRET_KEY=$flaskKey" }
+   if (-not (Select-String -Path .env -Pattern '^APP_DB_USER=' -Quiet)) { Add-Content .env 'APP_DB_USER=library_app' }
+   if (-not (Select-String -Path .env -Pattern '^APP_DB_PASSWORD=' -Quiet)) { Add-Content .env "APP_DB_PASSWORD=$appPassword" }
+   [Array]::Clear($flaskBytes, 0, $flaskBytes.Length)
+   [Array]::Clear($appBytes, 0, $appBytes.Length)
    $rng.Dispose()
-   Remove-Variable key, bytes, rng
+   Remove-Variable flaskKey, appPassword, flaskBytes, appBytes, rng
    ```
 
    Không gửi hoặc commit `.env`. `.env.example` chỉ có giá trị minh họa cho cài đặt mới.
 
-3. Từ thư mục dự án, build và khởi động dịch vụ:
+3. Tạo role PostgreSQL tối thiểu cho ứng dụng. Thêm `APP_DB_USER=library_app` và một `APP_DB_PASSWORD` ngẫu nhiên dài ít nhất 32 ký tự vào `.env`. Trên database đã có volume, provision role một lần trước khi khởi động web:
+
+   ```powershell
+   docker compose up -d db
+   docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/02_init_monitoring.sql'
+   docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/03_setup_app_role.sql'
+   ```
+
+   Hai lệnh chỉ tạo/cập nhật role và quyền; không xóa volume hoặc thay đổi dữ liệu bảng. Trên database mới, `01_init.sql`, `02_init_monitoring.sql` và `03_setup_app_role.sql` tự chạy theo thứ tự khi PostgreSQL khởi tạo volume.
+
+4. Từ thư mục dự án, build và khởi động dịch vụ:
 
    ```powershell
    docker compose up -d --build
@@ -36,7 +53,7 @@ Kiến trúc hiện tại có Nginx làm reverse proxy duy nhất:
 
    `web` đợi `db` khỏe trước khi khởi động; `nginx` đợi `web` khỏe. Healthcheck website gọi `/healthz`, endpoint này thử kết nối PostgreSQL. Các volume `postgres_data` và `pgadmin_data` được giữ nguyên.
 
-4. Mở [http://localhost:8081](http://localhost:8081). Toàn bộ traffic đi qua Nginx; chỉ Nginx bind vào loopback `127.0.0.1` để dùng tại máy hiện tại.
+5. Mở [http://localhost:8081](http://localhost:8081). Toàn bộ traffic đi qua Nginx; chỉ Nginx bind vào loopback `127.0.0.1` để dùng tại máy hiện tại.
 
 ## Reverse proxy và header bảo mật
 
@@ -45,7 +62,7 @@ Kiến trúc hiện tại có Nginx làm reverse proxy duy nhất:
 - `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`.
 - Forwarded headers `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port`.
 
-Flask bọc `ProxyFix` với `x_for=1, x_proto=1, x_host=1, x_port=1`, chỉ tin đúng một lớp proxy. Access/error log của Nginx ghi ra stdout/stderr để sẵn sàng cho Loki + Promtail ở giai đoạn sau.
+Flask bọc `ProxyFix` với `x_for=1, x_proto=1, x_host=1, x_port=1`, chỉ tin đúng một lớp proxy. Access/error log của Nginx ghi ra stdout/stderr để Promtail thu thập.
 
 Kiểm tra cấu hình Nginx:
 
@@ -86,15 +103,15 @@ Các dịch vụ giám sát chạy cùng Compose và chỉ bind `127.0.0.1`:
 
 Grafana provision sẵn datasource `Prometheus` và dashboard **Library Monitoring** gồm ba nhóm Container / Web / Database. Endpoint `/metrics` của Flask chỉ dùng nội bộ cho Prometheus; Nginx trả `404` khi gọi `GET /metrics` từ ngoài.
 
-Thiết lập tài khoản giám sát cho PostgreSQL (chạy một lần; dùng được cho cả DB đã tồn tại lẫn máy mới, không cần xóa volume):
+Thiết lập tài khoản giám sát cho PostgreSQL (chạy một lần cho DB đã tồn tại; DB mới tự chạy script khi khởi tạo):
 
-```bash
-docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  -v pg_exporter_password="$PG_EXPORTER_PASSWORD" -v ON_ERROR_STOP=1 \
-  < database/init_monitoring.sql
+```powershell
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/02_init_monitoring.sql'
 ```
 
-`database/init_monitoring.sql` tạo role `postgres_exporter` với `pg_monitor` (quyền đọc tối thiểu các view thống kê). `pg_stat_statements` được bật qua `command` của service `db` và `CREATE EXTENSION` trong `database/init.sql`.
+`database/init_monitoring.sql` tạo role `postgres_exporter` với `pg_monitor` (quyền đọc tối thiểu các view thống kê). Mật khẩu được đọc từ môi trường DB, không nằm trong source hoặc command line. `pg_stat_statements` được bật qua `command` của service `db`.
+
+Role `APP_DB_USER` được `database/setup_app_role.sql` cấp `CONNECT`, `USAGE` trên schema, CRUD chỉ trên `users`, `books`, `readers`, `loans`, và quyền dùng identity sequences. Role không có superuser, `CREATEDB`, `CREATEROLE`, quyền tạo bảng/schema hay membership khác. Website chỉ nhận thông tin đăng nhập role này; tài khoản bootstrap `POSTGRES_USER` không được truyền vào web.
 
 Kiểm tra nhanh:
 
@@ -118,9 +135,12 @@ Ghi chú Docker Desktop/WSL2: cAdvisor không lấy được tên container (ch�
 
   ```logql
   {project="library-management"}
-  {project="library-management", service="nginx"} |= " 404 "
+  {project="library-management", service="nginx"} |= "/__loki_probe_404"
+  {project="library-management", service="nginx"} |~ "\" [45][0-9]{2} "
   sum(count_over_time({project="library-management", service=~"nginx|web|db"}[5m]))
   ```
+
+  Truy vấn thứ hai chỉ tìm marker dùng trong demo; truy vấn thứ ba lọc status HTTP 4xx/5xx trong access log Nginx.
 
 - Khởi động và kiểm tra:
 
@@ -141,3 +161,11 @@ Ghi chú Docker Desktop/WSL2: cAdvisor không lấy được tên container (ch�
 - Không dùng `docker compose down -v` nếu muốn giữ dữ liệu hiện có. `docker compose down` không có `-v` vẫn giữ volume.
 - Các volume `postgres_data`, `pgadmin_data`, `prometheus_data`, `grafana_data`, `loki_data` và `promtail_positions` cần được giữ; không dùng `docker compose down -v`.
 - Nginx reverse proxy, Prometheus/Grafana và cấu hình Loki/Promtail đã có trong Compose. Xem `PROGRESS.md` để biết trạng thái kiểm tra runtime mới nhất.
+
+## Hardening và kiểm chứng
+
+- Web chạy bằng user `app`, filesystem gốc chỉ đọc, `/tmp` là tmpfs, bỏ toàn bộ Linux capabilities và bật `no-new-privileges`. Nginx bỏ toàn bộ capabilities trừ `NET_BIND_SERVICE`, `CHOWN`, `SETUID`, `SETGID` để bind cổng 80, đặt quyền thư mục tạm và hạ quyền worker; bật `no-new-privileges`.
+- Web, PostgreSQL, cAdvisor và exporters không publish cổng host. pgAdmin, Prometheus, Grafana và Nginx chỉ bind loopback. Các mạng `database_net`, `proxy_net`, `monitoring_net`, `logging_net` giới hạn giao tiếp theo dịch vụ cần thiết.
+- Mật khẩu DB, role ứng dụng, exporter, Grafana và khóa Flask chỉ nằm trong `.env` bị Git ignore. `.env.example` chứa giá trị mẫu. Không truyền mật khẩu PostgreSQL qua tham số command line khi chạy script provisioning.
+- cAdvisor cần `privileged` và quyền đọc thông tin Docker/host để thu metrics. Promtail cần Docker socket và log container; mount socket `:ro` không biến Docker API thành giao diện chỉ đọc. Chỉ chạy các collector này trong môi trường tin cậy. Promtail đã hết hỗ trợ từ 02/03/2026; giữ theo yêu cầu đề tài và nên thay bằng Alloy khi bảo trì.
+- Kết quả kiểm chứng và lệnh tái hiện nằm trong [docs/VERIFICATION.md](docs/VERIFICATION.md); kịch bản trình bày và danh sách ảnh cần chụp nằm trong [docs/DEMO.md](docs/DEMO.md).

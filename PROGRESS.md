@@ -58,6 +58,37 @@ Trang này ghi lại các giai đoạn đã hoàn thành và kết quả kiểm 
 
 ## Chưa kiểm tra / ghi chú
 
-- Chưa đăng nhập bằng tài khoản quản trị thật của website (không dùng mật khẩu có sẵn trong phiên này).
-- Chưa đăng nhập Grafana bằng trình duyệt để xem dashboard trực quan (đã xác nhận qua API: datasource hoạt động, dashboard được provision, các query trả về dữ liệu).
-- Promtail hết hỗ trợ từ 02/03/2026; dùng bản 3.5.8 theo yêu cầu giai đoạn. Nên chuyển sang Grafana Alloy trong giai đoạn bảo trì tiếp theo.
+- Chưa đăng nhập website bằng tài khoản quản trị thật trên database production; các luồng đăng nhập/nghiệp vụ được thử trên database scratch riêng. CLI tạo admin bằng terminal tương tác đã thử, mật khẩu không hiện ra trong terminal output.
+- Chưa mở Grafana bằng trình duyệt để đánh giá trực quan các panel; datasource, dashboard và truy vấn metrics/logs đã xác nhận qua API.
+- Promtail hết hỗ trợ từ 02/03/2026; giữ bản 3.5.8 theo yêu cầu đề tài. Cần lên kế hoạch chuyển sang Grafana Alloy.
+
+## Giai đoạn 5 — Hardening và kiểm chứng tổng thể (2026-10-14)
+
+### Cấu hình và bảo mật
+
+- Tạo role runtime `library_app` riêng cho Flask. `web` chỉ nhận `PGUSER`/`PGPASSWORD` của role này; `POSTGRES_USER`/`POSTGRES_PASSWORD` không còn được truyền vào container web.
+- Thêm `database/setup_app_role.sql`, chạy tự động trên volume DB mới và chạy thủ công được trên DB hiện hữu. Role có `CONNECT`, `USAGE` schema, CRUD trên đúng bốn bảng ứng dụng và quyền dùng identity sequence; không có `SUPERUSER`, `CREATEDB`, `CREATEROLE`, `BYPASSRLS`, membership hoặc quyền DDL.
+- Sửa `database/init_monitoring.sql` để tự đọc `PG_EXPORTER_PASSWORD`, dùng được khi init DB mới và provision lại DB hiện có mà không truyền mật khẩu trên command line. `postgres_exporter` giữ `pg_monitor` và không có quyền elevated.
+- Web chạy `app:app`, root filesystem read-only, `/tmp` tmpfs, `cap_drop: ALL`, `no-new-privileges`. Hai exporter cũng chạy root filesystem read-only, bỏ capabilities và bật `no-new-privileges`.
+- Nginx bỏ toàn bộ capabilities ngoại trừ `NET_BIND_SERVICE`, `CHOWN`, `SETUID`, `SETGID` cần cho cổng 80, thư mục temp và worker không-root; bật `no-new-privileges`. Nginx root filesystem vẫn writable vì image cần tạo/chown thư mục cache lúc khởi động.
+- DB, web, cAdvisor và exporters không publish cổng host. pgAdmin, Nginx, Prometheus, Grafana bind loopback. Các dịch vụ dùng các mạng Compose đã tách. cAdvisor vẫn cần `privileged`; Promtail vẫn cần Docker socket và đọc container logs.
+- `.env` vẫn bị Git ignore; `.env.example` chỉ có giá trị mẫu. Không đổi mật khẩu bootstrap/pgAdmin/Grafana hiện có; chỉ thêm `APP_DB_USER` và khóa ngẫu nhiên riêng cho role web trong `.env` local.
+
+### Kết quả kiểm tra thật
+
+- `docker compose config --quiet` — đạt; `docker compose up -d --build` cho project hiện tại — đạt, không xóa/recreate named volumes.
+- DB hiện tại: provisioning role thành công. Role `library_app` có các cờ elevated đều `false`; role website runtime được xác nhận bằng `SELECT current_user` là `library_app`. Bộ đếm trước/sau provisioning giữ nguyên `6 sách : 4 độc giả : 1 lượt mượn : 1 tài khoản`.
+- Website `/healthz` trả `status=ok`, `database=ok`; Nginx `nginx -t` thành công; `/login` và `/static/styles.css` trả 200, ba security headers đúng. pgAdmin login page trả 200.
+- Web container có user `app:app`, root filesystem read-only, cap drop ALL, no-new-privileges và không publish port. Nginx worker chạy user `nginx`; exporters không publish port, root filesystem read-only và cap drop ALL.
+- Prometheus targets: 5/5 UP (`prometheus`, `cadvisor`, `web`, `nginx-exporter`, `postgres-exporter`). Grafana API truy vấn `up` trả 5 series, `pg_up=1`, và `flask_http_request_total` có 2 series.
+- Sau khi tạo một HTTP 404 thử nghiệm qua Nginx, Grafana datasource Loki chạy được: xem log (`limit=200`, trả 200 entries trong lần lấy mẫu), marker `/__loki_probe_404` trả 1 entry, regex status 4xx/5xx trả 1 entry thật, query `sum(count_over_time(...[5m]))` trả dữ liệu. Truy vấn riêng theo nhãn 60 phút cho thấy `db=27`, `web=500` và `nginx=500` entries; hai giá trị cuối chạm limit lấy mẫu 500. Log có cả Nginx, Flask/Gunicorn và PostgreSQL.
+- Database mới trong project test khác được init tự động: 5 sách, 3 độc giả; role app/exporter đạt kiểm tra quyền; admin được tạo bằng CLI với mật khẩu nhập ẩn; Grafana provision datasource `Prometheus`, `Loki` và dashboard `Library Monitoring`; API query trả 5 target.
+- `tests/verify_flows.py` chạy trên DB scratch: thêm/sửa/tìm sách và độc giả; mượn cuốn còn, từ chối khi hết; hai request song song tranh cuốn cuối chỉ một request tạo lượt mượn; trả sách và từ chối trả lần hai; chặn giảm số lượng dưới số đang mượn; từ chối xóa sách/độc giả có lịch sử và giữ bản ghi; login/logout/protected page/CSRF/password hash. Kiểm tra headers, CSS, login/logout/CSRF qua Nginx cũng đạt.
+- Fresh stack cuối cùng chạy `docker compose -p library-hardening-fresh-20261014 up -d --build` thành công trên cổng thử `18281`, `15505`, `19091`, `13001`; DB/web/Nginx healthy, pgAdmin 200, Grafana API healthy, 5/5 target UP. Stack đã dừng bằng `down` không `-v`; cả sáu test volumes được giữ.
+- Một project scratch bổ sung (`library-hardening-verify-20261014`) cũng được dừng không `-v`; sáu test volumes của project này được giữ. Sáu production volumes (`postgres_data`, `pgadmin_data`, `prometheus_data`, `grafana_data`, `loki_data`, `promtail_positions`) còn nguyên.
+
+### Giới hạn
+
+- Không dùng tài khoản admin thật hoặc sửa/xóa dữ liệu production; các thao tác nghiệp vụ chỉ chạy trên database scratch.
+- API Grafana đã được thử, nhưng chưa mở dashboard bằng trình duyệt và chưa chụp ảnh báo cáo.
+- Promtail đã EOL từ 02/03/2026; giữ theo yêu cầu đề tài, cần thay bằng Alloy trước khi dùng lâu dài.
