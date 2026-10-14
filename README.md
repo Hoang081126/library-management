@@ -8,7 +8,7 @@ Kiến trúc hiện tại có Nginx làm reverse proxy duy nhất:
 - **web** (Flask/Gunicorn) chạy nội bộ trên mạng `proxy_net` + `database_net`, **không** publish cổng host.
 - **pgAdmin** ở `http://localhost:5055`; **db** (PostgreSQL 17) chỉ nội bộ trên `database_net`.
 - Website ở `http://localhost:8081` trên máy hiện tại (cổng 8080 đã có dịch vụ Apache).
-- Giám sát: **Prometheus** `http://localhost:9090`, **Grafana** `http://localhost:3000` (xem mục Giám sát bên dưới).
+- Giám sát: **Prometheus** `http://localhost:9090`, **Grafana** `http://localhost:3000`; log tập trung qua Loki (xem các mục Giám sát và Log tập trung).
 
 ## Chạy website
 
@@ -108,8 +108,36 @@ Invoke-RestMethod "http://localhost:9090/api/v1/query?query=sum(flask_http_reque
 
 Ghi chú Docker Desktop/WSL2: cAdvisor không lấy được tên container (chỉ có `id`, đã rút gọn thành nhãn `container_id`) và không có metrics network theo từng container (chỉ có lưu lượng theo interface Docker). Chi tiết xem `PROGRESS.md`.
 
+## Log tập trung (Loki + Promtail)
+
+- Loki chạy nội bộ trên `monitoring_net` và `logging_net`, không publish cổng host. Grafana truy vấn Loki qua datasource provision sẵn `Loki` (`http://loki:3100`).
+- Promtail chỉ giữ các container có Compose project `library-management`, đọc Docker JSON log, và gửi đến Loki. Log có nhãn `project`, `service`, `container`, `job`; vị trí đọc được giữ trong volume `promtail_positions`.
+- Dữ liệu Loki lưu trong volume `loki_data`, cấu hình retention 7 ngày. Hai volume này độc lập với volume dữ liệu PostgreSQL, pgAdmin, Grafana và Prometheus.
+- Promtail dùng Docker discovery qua socket `/var/run/docker.sock` được mount read-only và đọc `/var/lib/docker/containers` read-only. Docker socket là giao diện quyền cao; chỉ chạy collector tin cậy trong project này.
+- Mở Grafana `http://localhost:3000` → Explore → chọn datasource `Loki`. Một số truy vấn LogQL:
+
+  ```logql
+  {project="library-management"}
+  {project="library-management", service="nginx"} |= " 404 "
+  sum(count_over_time({project="library-management", service=~"nginx|web|db"}[5m]))
+  ```
+
+- Khởi động và kiểm tra:
+
+  ```powershell
+  docker compose up -d loki promtail
+  docker compose restart grafana
+  docker compose ps
+  docker compose logs --tail 100 loki promtail
+  Invoke-WebRequest http://localhost:8081/healthz
+  ```
+
+  Request health tạo một access log ở Nginx để tìm trong Explore. Loki không có cổng host; Grafana là giao diện tra cứu.
+- **Vòng đời:** Grafana đánh dấu Promtail hết hỗ trợ từ 02/03/2026. Bản 3.5.8 được giữ ở đây vì giai đoạn dự án yêu cầu Promtail; nên chuyển collector sang Grafana Alloy trước khi dùng lâu dài. Xem [thông báo Promtail EOL](https://grafana.com/docs/loki/latest/send-data/promtail/) và [hướng dẫn chuyển sang Alloy](https://grafana.com/docs/alloy/latest/set-up/migrate/from-promtail/).
+
 ## Lưu ý vận hành
 
 - `database/init.sql` của PostgreSQL chỉ chạy khi khởi tạo data directory mới. Thêm web/nginx không xóa volume hay chạy lại script lên database đã có.
 - Không dùng `docker compose down -v` nếu muốn giữ dữ liệu hiện có. `docker compose down` không có `-v` vẫn giữ volume.
-- Đã có Nginx reverse proxy và giám sát Prometheus/Grafana. Loki/Promtail và log tập trung làm ở giai đoạn sau.
+- Các volume `postgres_data`, `pgadmin_data`, `prometheus_data`, `grafana_data`, `loki_data` và `promtail_positions` cần được giữ; không dùng `docker compose down -v`.
+- Nginx reverse proxy, Prometheus/Grafana và cấu hình Loki/Promtail đã có trong Compose. Xem `PROGRESS.md` để biết trạng thái kiểm tra runtime mới nhất.

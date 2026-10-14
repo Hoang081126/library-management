@@ -24,6 +24,19 @@ Trang này ghi lại các giai đoạn đã hoàn thành và kết quả kiểm 
 - PostgreSQL: bật `pg_stat_statements`, tạo role `postgres_exporter` với `pg_monitor` (`database/init_monitoring.sql`).
 - Grafana provision datasource `Prometheus` và dashboard **Library Monitoring** (3 nhóm Container/Web/Database).
 
+### Giai đoạn 4 — Log tập trung Loki + Promtail
+- Không tìm thấy cấu hình Loki/Promtail trước đó; chỉ có Nginx access/error log trên stdout/stderr và ghi chú đây là giai đoạn sau.
+- Thêm Loki `grafana/loki:3.7.8` với lưu trữ filesystem và retention 7 ngày trên volume `loki_data`; không publish cổng host.
+- Thêm Promtail `grafana/promtail:3.5.8`, chỉ thu container có nhãn Compose project `library-management`, với labels project/service/container; giữ vị trí đọc trên volume `promtail_positions`.
+- Provision datasource Loki vào Grafana; `loki` cùng mạng `monitoring_net` để Grafana truy vấn và `logging_net` dùng riêng cho Promtail.
+- `docker compose config --quiet` — hợp lệ; image `grafana/loki:3.7.8` và `grafana/promtail:3.5.8` đã tải, cả hai container đang chạy. Loki `/ready` trả 200.
+- Restart riêng Grafana để nạp provisioning; API health datasource `Loki` trả `Data source successfully connected`.
+- Promtail Docker discovery tìm thấy container của project; trong 10 phút truy vấn có log từ `nginx`, `web` (Flask/Gunicorn) và `db` (PostgreSQL). Marker 404 thử nghiệm xuất hiện ở log Nginx và web; marker `SELECT` read-only xuất hiện trong log PostgreSQL.
+- Ba LogQL query chạy thành công qua Grafana datasource proxy: xem log `{project="library-management"}` (100 dòng trả về trong cửa sổ 10 phút), lọc 404 `{project="library-management", service="nginx"} |= "/__loki_probe_404"` (3 dòng), và đếm `sum(count_over_time({project="library-management", service=~"nginx|web|db"}[5m]))` (171 dòng).
+- Nginx `/healthz` trả 200, PostgreSQL `database: ok`; 5/5 Prometheus targets vẫn **UP**.
+- Khi Promtail đọc lại một số file log cũ lúc khởi động, Loki từ chối 7 entry quá cũ/thứ tự đến muộn trong 5 phút đầu. Không có lỗi gửi của Promtail hay từ chối kiểu này trong phút kiểm tra gần nhất; các log mới và marker trên đã được truy vấn thành công.
+- Promtail đã EOL từ 02/03/2026; dùng phiên bản 3.5.8 theo yêu cầu giai đoạn, cần lên kế hoạch thay bằng Grafana Alloy.
+
 ## Kết quả kiểm tra (2026-10-14)
 
 - `docker compose config --quiet` — hợp lệ.
@@ -47,4 +60,4 @@ Trang này ghi lại các giai đoạn đã hoàn thành và kết quả kiểm 
 
 - Chưa đăng nhập bằng tài khoản quản trị thật của website (không dùng mật khẩu có sẵn trong phiên này).
 - Chưa đăng nhập Grafana bằng trình duyệt để xem dashboard trực quan (đã xác nhận qua API: datasource hoạt động, dashboard được provision, các query trả về dữ liệu).
-- Loki/Promtail và log tập trung — làm ở giai đoạn sau.
+- Promtail hết hỗ trợ từ 02/03/2026; dùng bản 3.5.8 theo yêu cầu giai đoạn. Nên chuyển sang Grafana Alloy trong giai đoạn bảo trì tiếp theo.
