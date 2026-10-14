@@ -21,6 +21,7 @@ from flask import (
 from psycopg import errors
 from psycopg.rows import dict_row
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 
 app = Flask(__name__)
@@ -31,6 +32,7 @@ app.config.update(
     SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
     MAX_CONTENT_LENGTH=1024 * 1024,
 )
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 APP_TIMEZONE = timezone(timedelta(hours=7), name="ICT")
 
