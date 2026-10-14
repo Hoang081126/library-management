@@ -20,6 +20,7 @@ from flask import (
 )
 from psycopg import errors
 from psycopg.rows import dict_row
+from prometheus_flask_exporter import PrometheusMetrics
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -33,6 +34,7 @@ app.config.update(
     MAX_CONTENT_LENGTH=1024 * 1024,
 )
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+metrics = PrometheusMetrics(app)
 
 APP_TIMEZONE = timezone(timedelta(hours=7), name="ICT")
 
@@ -167,6 +169,7 @@ def validate_reader_form():
 
 
 @app.get("/healthz")
+@metrics.do_not_track()
 def healthz():
     try:
         with connect_db() as conn:

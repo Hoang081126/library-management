@@ -4,6 +4,7 @@ services:
   db:
     image: postgres:17
     restart: unless-stopped
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?Missing POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER:?Missing POSTGRES_USER}
@@ -50,6 +51,7 @@ services:
     networks:
       - database_net
       - proxy_net
+      - monitoring_net
     depends_on:
       db:
         condition: service_healthy
@@ -79,12 +81,102 @@ services:
       retries: 5
       start_period: 10s
 
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - monitoring_net
+    depends_on:
+      web:
+        condition: service_healthy
+      cadvisor:
+        condition: service_started
+      postgres-exporter:
+        condition: service_started
+      nginx-exporter:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:13.2.3
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - monitoring_net
+    depends_on:
+      prometheus:
+        condition: service_started
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:0.55.1
+    restart: unless-stopped
+    privileged: true
+    environment:
+      DOCKER_API_VERSION: "1.44"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring_net
+    # Không publish cổng host; Prometheus scrape nội bộ qua monitoring_net.
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: "db:5432/${POSTGRES_DB}?sslmode=disable"
+      DATA_SOURCE_USER: postgres_exporter
+      DATA_SOURCE_PASS: ${PG_EXPORTER_PASSWORD:?Set PG_EXPORTER_PASSWORD in .env}
+    networks:
+      - database_net
+      - monitoring_net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4.1
+    restart: unless-stopped
+    command:
+      - "-nginx.scrape-uri=http://nginx:8080/nginx_status"
+    networks:
+      - proxy_net
+      - monitoring_net
+    depends_on:
+      nginx:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   pgadmin_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   database_net:
     driver: bridge
   proxy_net:
+    driver: bridge
+  monitoring_net:
     driver: bridge

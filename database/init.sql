@@ -100,6 +100,10 @@ ON CONFLICT (reader_code) DO NOTHING;
 
 COMMIT;
 
+-- Kích hoạt pg_stat_statements để postgres_exporter thu thập metrics hoạt động
+-- truy vấn. shared_preload_libraries được đặt qua `command` trong docker-compose.yml.
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
 -- Kiểm tra dữ liệu vừa tạo.
 SELECT 'books' AS table_name, COUNT(*) AS total FROM books
 UNION ALL

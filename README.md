@@ -8,6 +8,7 @@ Kiến trúc hiện tại có Nginx làm reverse proxy duy nhất:
 - **web** (Flask/Gunicorn) chạy nội bộ trên mạng `proxy_net` + `database_net`, **không** publish cổng host.
 - **pgAdmin** ở `http://localhost:5055`; **db** (PostgreSQL 17) chỉ nội bộ trên `database_net`.
 - Website ở `http://localhost:8081` trên máy hiện tại (cổng 8080 đã có dịch vụ Apache).
+- Giám sát: **Prometheus** `http://localhost:9090`, **Grafana** `http://localhost:3000` (xem mục Giám sát bên dưới).
 
 ## Chạy website
 
@@ -73,8 +74,42 @@ Tên đăng nhập chỉ gồm chữ/số/dấu `.`, `_`, `-` và dài 3–50 k�
 
 Các thao tác thêm, sửa, xóa, mượn, trả và đăng xuất dùng POST có CSRF token. Đăng nhập yêu cầu mật khẩu băm, không có tài khoản hoặc mật khẩu mặc định trong source. Các yêu cầu mượn cùng sách được tuần tự hóa bằng khóa hàng PostgreSQL trong transaction, sau đó mới đếm lượt chưa trả và tạo lượt mới.
 
+## Giám sát (Prometheus + Grafana)
+
+Các dịch vụ giám sát chạy cùng Compose và chỉ bind `127.0.0.1`:
+
+- **Prometheus** — `http://localhost:9090` (xem targets, truy vấn).
+- **Grafana** — `http://localhost:3000`, đăng nhập `admin` + `GRAFANA_ADMIN_PASSWORD` trong `.env`.
+- **cAdvisor** — metrics container (CPU/RAM/network), không publish cổng host.
+- **postgres-exporter** — metrics PostgreSQL (kết nối, giao dịch, cache, kích thước, tuples…).
+- **nginx-exporter** — metrics Nginx (kết nối, request) qua `stub_status` nội bộ.
+
+Grafana provision sẵn datasource `Prometheus` và dashboard **Library Monitoring** gồm ba nhóm Container / Web / Database. Endpoint `/metrics` của Flask chỉ dùng nội bộ cho Prometheus; Nginx trả `404` khi gọi `GET /metrics` từ ngoài.
+
+Thiết lập tài khoản giám sát cho PostgreSQL (chạy một lần; dùng được cho cả DB đã tồn tại lẫn máy mới, không cần xóa volume):
+
+```bash
+docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -v pg_exporter_password="$PG_EXPORTER_PASSWORD" -v ON_ERROR_STOP=1 \
+  < database/init_monitoring.sql
+```
+
+`database/init_monitoring.sql` tạo role `postgres_exporter` với `pg_monitor` (quyền đọc tối thiểu các view thống kê). `pg_stat_statements` được bật qua `command` của service `db` và `CREATE EXTENSION` trong `database/init.sql`.
+
+Kiểm tra nhanh:
+
+```powershell
+# Các target Prometheus đều UP
+Invoke-RestMethod http://localhost:9090/api/v1/targets
+
+# Số request của web
+Invoke-RestMethod "http://localhost:9090/api/v1/query?query=sum(flask_http_request_total)"
+```
+
+Ghi chú Docker Desktop/WSL2: cAdvisor không lấy được tên container (chỉ có `id`, đã rút gọn thành nhãn `container_id`) và không có metrics network theo từng container (chỉ có lưu lượng theo interface Docker). Chi tiết xem `PROGRESS.md`.
+
 ## Lưu ý vận hành
 
 - `database/init.sql` của PostgreSQL chỉ chạy khi khởi tạo data directory mới. Thêm web/nginx không xóa volume hay chạy lại script lên database đã có.
 - Không dùng `docker compose down -v` nếu muốn giữ dữ liệu hiện có. `docker compose down` không có `-v` vẫn giữ volume.
-- Giai đoạn này đã có Nginx reverse proxy; Prometheus/Grafana, Loki/Promtail và log tập trung làm ở giai đoạn sau.
+- Đã có Nginx reverse proxy và giám sát Prometheus/Grafana. Loki/Promtail và log tập trung làm ở giai đoạn sau.
