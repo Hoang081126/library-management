@@ -1,0 +1,12 @@
+{% extends "auth_base.html" %}
+{% block title %}Đăng nhập{% endblock %}
+{% block content %}
+  <div class="auth-heading"><p class="eyebrow">CHÀO MỪNG TRỞ LẠI</p><h1>Đăng nhập</h1><p>Đăng nhập để quản lý hoạt động thư viện.</p></div>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+    <label>Tên đăng nhập<input type="text" name="username" value="{{ username }}" autocomplete="username" required autofocus maxlength="50"></label>
+    <label>Mật khẩu<input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="button primary full-width" type="submit">Đăng nhập <span>→</span></button>
+  </form>
+{% endblock %}

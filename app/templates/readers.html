@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Độc giả{% endblock %}
+{% block content %}
+  <div class="page-heading"><div><p class="eyebrow">DANH MỤC</p><h1>Độc giả</h1><p class="subheading">Quản lý thông tin và liên hệ của độc giả.</p></div><a class="button primary" href="{{ url_for('new_reader') }}">Thêm độc giả <span>＋</span></a></div>
+  <div class="panel toolbar-panel"><form class="search-form" method="get"><span class="search-icon">⌕</span><input type="search" name="q" value="{{ q }}" placeholder="Tìm theo mã, tên, điện thoại, email..."><button class="button secondary" type="submit">Tìm kiếm</button></form><span class="result-count">{{ readers|length }} độc giả</span></div>
+  <section class="panel table-panel">{% if readers %}<div class="table-wrap"><table><thead><tr><th>Mã độc giả</th><th>Họ và tên</th><th>Điện thoại</th><th>Email</th><th>Địa chỉ</th><th class="actions-heading">Thao tác</th></tr></thead><tbody>
+    {% for reader in readers %}<tr><td><span class="code-pill">{{ reader.reader_code }}</span></td><td class="primary-cell">{{ reader.full_name }}</td><td>{{ reader.phone or '—' }}</td><td>{{ reader.email or '—' }}</td><td class="address-cell">{{ reader.address or '—' }}</td><td><div class="row-actions"><a class="icon-button" href="{{ url_for('edit_reader', reader_id=reader.id) }}" aria-label="Sửa {{ reader.full_name }}" title="Sửa">✎</a><form method="post" action="{{ url_for('delete_reader', reader_id=reader.id) }}" onsubmit="return confirm('Xóa hồ sơ độc giả này? Lịch sử mượn sẽ được bảo toàn.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-button danger-icon" type="submit" aria-label="Xóa {{ reader.full_name }}" title="Xóa">×</button></form></div></td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<div class="empty-state"><span>♙</span><strong>Không tìm thấy độc giả</strong><p>Thử từ khóa khác hoặc thêm độc giả mới.</p></div>{% endif %}</section>
+{% endblock %}

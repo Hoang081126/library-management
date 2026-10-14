@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Sửa độc giả' if editing else 'Thêm độc giả' }}{% endblock %}
+{% block content %}
+  <div class="page-heading"><div><p class="eyebrow">DANH MỤC ĐỘC GIẢ</p><h1>{{ 'Sửa thông tin độc giả' if editing else 'Thêm độc giả mới' }}</h1><p class="subheading">Thông tin liên hệ được dùng trong sổ mượn trả.</p></div><a class="button secondary" href="{{ url_for('readers') }}">← Quay lại</a></div>
+  <section class="panel form-panel"><form method="post" action="{{ url_for('edit_reader', reader_id=reader.id) if editing else url_for('readers') }}" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Mã độc giả <span class="required">*</span><input name="reader_code" maxlength="30" required value="{{ reader.reader_code or '' }}" placeholder="Ví dụ: DG004">{% if errors.get('reader_code') %}<small class="field-error">{{ errors.reader_code }}</small>{% endif %}</label>
+    <label>Họ và tên <span class="required">*</span><input name="full_name" maxlength="100" required value="{{ reader.full_name or '' }}" placeholder="Họ tên độc giả">{% if errors.get('full_name') %}<small class="field-error">{{ errors.full_name }}</small>{% endif %}</label>
+    <label>Số điện thoại<input name="phone" maxlength="20" value="{{ reader.phone or '' }}" placeholder="0900 000 000">{% if errors.get('phone') %}<small class="field-error">{{ errors.phone }}</small>{% endif %}</label>
+    <label>Email<input name="email" type="email" maxlength="150" value="{{ reader.email or '' }}" placeholder="ten@example.com">{% if errors.get('email') %}<small class="field-error">{{ errors.email }}</small>{% endif %}</label>
+    <label class="full-span">Địa chỉ<textarea name="address" rows="3" maxlength="5000" placeholder="Địa chỉ liên hệ">{{ reader.address or '' }}</textarea>{% if errors.get('address') %}<small class="field-error">{{ errors.address }}</small>{% endif %}</label>
+    <div class="form-actions"><a class="button secondary" href="{{ url_for('readers') }}">Hủy</a><button class="button primary" type="submit">{{ 'Lưu thay đổi' if editing else 'Thêm độc giả' }}</button></div>
+  </form></section>
+{% endblock %}

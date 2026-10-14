@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Mượn và trả{% endblock %}
+{% block content %}
+  <div class="page-heading"><div><p class="eyebrow">GIAO DỊCH</p><h1>Mượn và trả sách</h1><p class="subheading">Mỗi lượt mượn tương ứng một cuốn sách.</p></div></div>
+  <section class="panel loan-form-panel"><div class="panel-heading"><div><h2>Ghi nhận mượn sách</h2><p>Chỉ sách còn trong kho mới có thể được mượn.</p></div><span class="panel-icon">↔</span></div>
+    <form method="post" class="loan-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Độc giả<select name="reader_id" required><option value="">Chọn độc giả</option>{% for reader in readers %}<option value="{{ reader.id }}">{{ reader.reader_code }} · {{ reader.full_name }}</option>{% endfor %}</select></label>
+      <label>Sách<select name="book_id" required><option value="">Chọn sách</option>{% for book in books %}{% if book.available_quantity > 0 %}<option value="{{ book.id }}">{{ book.book_code }} · {{ book.title }} (còn {{ book.available_quantity }})</option>{% endif %}{% endfor %}</select></label>
+      <label>Ngày mượn<input type="date" name="borrowed_date" value="{{ today }}" required></label>
+      <label>Hạn trả<input type="date" name="due_date" value="{{ due_date_default }}" required></label>
+      <label class="loan-note">Ghi chú<input name="note" maxlength="2000" placeholder="Không bắt buộc"></label>
+      <button class="button primary loan-submit" type="submit">Xác nhận mượn <span>→</span></button>
+    </form>
+    {% if not readers %}<p class="inline-note">Cần thêm độc giả trước khi ghi nhận mượn.</p>{% elif not books|selectattr('available_quantity', 'gt', 0)|list %}<p class="inline-note">Hiện không có sách nào sẵn sàng cho mượn.</p>{% endif %}
+  </section>
+  <section class="panel table-panel loan-history"><div class="panel-heading"><div><h2>Sổ mượn trả</h2><p>{{ loans|length }} lượt mượn trong lịch sử</p></div><div class="legend"><span><i class="dot green"></i>Đang mượn</span><span><i class="dot red"></i>Quá hạn</span></div></div>
+    {% if loans %}<div class="table-wrap"><table><thead><tr><th>Độc giả</th><th>Sách</th><th>Ngày mượn</th><th>Hạn trả</th><th>Ngày trả</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+      {% for loan in loans %}<tr><td class="primary-cell">{{ loan.reader_name }}<small>{{ loan.reader_code }}</small></td><td>{{ loan.book_title }}<small>{{ loan.book_code }}</small></td><td>{{ loan.borrowed_date.strftime('%d/%m/%Y') }}</td><td>{{ loan.due_date.strftime('%d/%m/%Y') }}</td><td>{{ loan.returned_date.strftime('%d/%m/%Y') if loan.returned_date else '—' }}</td><td>{% if loan.returned_date %}<span class="badge returned">Đã trả</span>{% elif loan.is_overdue %}<span class="badge overdue">Quá hạn</span>{% else %}<span class="badge active">Đang mượn</span>{% endif %}</td><td>{% if not loan.returned_date %}<form method="post" action="{{ url_for('return_loan', loan_id=loan.id) }}" onsubmit="return confirm('Xác nhận đã nhận lại sách?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button small secondary" type="submit">Trả sách</button></form>{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<div class="empty-state"><span>↔</span><strong>Chưa có lịch sử mượn</strong><p>Các giao dịch sẽ được lưu tại đây.</p></div>{% endif %}
+  </section>
+{% endblock %}

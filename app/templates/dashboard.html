@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Tổng quan{% endblock %}
+{% block content %}
+  <div class="page-heading"><div><p class="eyebrow">TỔNG QUAN</p><h1>Chào {{ g.user.full_name }}</h1><p class="subheading">Tình hình hoạt động thư viện hiện tại.</p></div><a class="button primary" href="{{ url_for('loans') }}">Ghi nhận mượn sách <span>→</span></a></div>
+  <div class="stat-grid">
+    <article class="stat-card"><div class="stat-icon blue">▤</div><p>Đầu sách</p><strong>{{ stats.title_count }}</strong><small>Tựa sách trong danh mục</small></article>
+    <article class="stat-card"><div class="stat-icon violet">▥</div><p>Tổng số cuốn</p><strong>{{ stats.copy_count }}</strong><small>Số bản sách hiện có</small></article>
+    <article class="stat-card"><div class="stat-icon teal">♙</div><p>Độc giả</p><strong>{{ stats.reader_count }}</strong><small>Hồ sơ độc giả</small></article>
+    <article class="stat-card"><div class="stat-icon amber">↔</div><p>Đang mượn</p><strong>{{ stats.active_loans }}</strong><small>Lượt chưa trả · <b class="overdue-text">{{ stats.overdue_loans }} quá hạn</b></small></article>
+  </div>
+  <section class="panel">
+    <div class="panel-heading"><div><h2>Lượt mượn gần đây</h2><p>Các giao dịch mới nhất trong hệ thống</p></div><a class="text-link" href="{{ url_for('loans') }}">Xem tất cả <span>→</span></a></div>
+    {% if recent_loans %}<div class="table-wrap"><table><thead><tr><th>Độc giả</th><th>Sách</th><th>Ngày mượn</th><th>Hạn trả</th><th>Trạng thái</th></tr></thead><tbody>
+      {% for loan in recent_loans %}<tr><td class="primary-cell">{{ loan.full_name }}</td><td>{{ loan.title }}</td><td>{{ loan.borrowed_date.strftime('%d/%m/%Y') }}</td><td>{{ loan.due_date.strftime('%d/%m/%Y') }}</td><td>{% if loan.returned_date %}<span class="badge returned">Đã trả</span>{% elif loan.due_date < today %}<span class="badge overdue">Quá hạn</span>{% else %}<span class="badge active">Đang mượn</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<div class="empty-state"><span>↔</span><strong>Chưa có lượt mượn nào</strong><p>Lượt mượn mới sẽ xuất hiện tại đây.</p></div>{% endif %}
+  </section>
+{% endblock %}

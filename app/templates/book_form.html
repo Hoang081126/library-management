@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Sửa thông tin sách' if editing else 'Thêm sách' }}{% endblock %}
+{% block content %}
+  <div class="page-heading"><div><p class="eyebrow">DANH MỤC SÁCH</p><h1>{{ 'Sửa thông tin sách' if editing else 'Thêm sách mới' }}</h1><p class="subheading">Thông tin sách được lưu vào danh mục thư viện.</p></div><a class="button secondary" href="{{ url_for('books') }}">← Quay lại</a></div>
+  <section class="panel form-panel"><form method="post" action="{{ url_for('edit_book', book_id=book.id) if editing else url_for('books') }}" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Mã sách <span class="required">*</span><input name="book_code" maxlength="30" required value="{{ book.book_code or '' }}" placeholder="Ví dụ: S006">{% if errors.get('book_code') %}<small class="field-error">{{ errors.book_code }}</small>{% endif %}</label>
+    <label>Tên sách <span class="required">*</span><input name="title" maxlength="200" required value="{{ book.title or '' }}" placeholder="Tên sách">{% if errors.get('title') %}<small class="field-error">{{ errors.title }}</small>{% endif %}</label>
+    <label>Tác giả <span class="required">*</span><input name="author" maxlength="150" required value="{{ book.author or '' }}" placeholder="Tên tác giả">{% if errors.get('author') %}<small class="field-error">{{ errors.author }}</small>{% endif %}</label>
+    <label>Thể loại <span class="required">*</span><input name="category" maxlength="100" required value="{{ book.category or '' }}" placeholder="Ví dụ: Văn học">{% if errors.get('category') %}<small class="field-error">{{ errors.category }}</small>{% endif %}</label>
+    <label>Nhà xuất bản<input name="publisher" maxlength="150" value="{{ book.publisher or '' }}" placeholder="Tên nhà xuất bản"></label>
+    <label>Năm xuất bản<input name="publication_year" type="number" min="1000" max="9999" value="{{ book.publication_year or '' }}" placeholder="2024">{% if errors.get('publication_year') %}<small class="field-error">{{ errors.publication_year }}</small>{% endif %}</label>
+    <label>Số lượng cuốn <span class="required">*</span><input name="total_quantity" type="number" min="0" step="1" required value="{{ book.total_quantity if book.total_quantity is defined and book.total_quantity is not none else 1 }}">{% if errors.get('total_quantity') %}<small class="field-error">{{ errors.total_quantity }}</small>{% endif %}<small class="field-hint">Không thể giảm thấp hơn số cuốn đang được mượn.</small></label>
+    <div class="form-actions"><a class="button secondary" href="{{ url_for('books') }}">Hủy</a><button class="button primary" type="submit">{{ 'Lưu thay đổi' if editing else 'Thêm sách' }}</button></div>
+  </form></section>
+{% endblock %}

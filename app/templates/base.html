@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Quản lý thư viện{% endblock %} · Thư viện</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="{{ url_for('dashboard') }}"><span class="brand-mark">TV</span><span>Thư viện<small>QUẢN LÝ NỘI BỘ</small></span></a>
+      <nav class="primary-nav" aria-label="Điều hướng chính">
+        <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}"><span>◫</span>Tổng quan</a>
+        <a href="{{ url_for('books') }}" class="{% if request.endpoint in ['books', 'edit_book'] %}active{% endif %}"><span>▤</span>Quản lý sách</a>
+        <a href="{{ url_for('readers') }}" class="{% if request.endpoint in ['readers', 'edit_reader'] %}active{% endif %}"><span>♙</span>Độc giả</a>
+        <a href="{{ url_for('loans') }}" class="{% if request.endpoint in ['loans', 'return_loan'] %}active{% endif %}"><span>↔</span>Mượn và trả</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="user-chip"><span class="avatar">{{ (g.user.full_name or 'Q')[:1] }}</span><span class="user-details"><strong>{{ g.user.full_name }}</strong><small>{{ g.user.username }}</small></span></div>
+        <form action="{{ url_for('logout') }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="nav-logout" type="submit"><span>↪</span>Đăng xuất</button></form>
+      </div>
+    </aside>
+    <main class="main-area">
+      <header class="topbar"><span class="breadcrumb">HỆ THỐNG QUẢN LÝ THƯ VIỆN</span><span class="topbar-date">Hôm nay · {{ today_label or '' }}</span></header>
+      <section class="page-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}<div class="flash-stack" aria-live="polite">{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </section>
+    </main>
+  </div>
+</body>
+</html>

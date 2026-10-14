@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Quản lý sách{% endblock %}
+{% block content %}
+  <div class="page-heading"><div><p class="eyebrow">DANH MỤC</p><h1>Quản lý sách</h1><p class="subheading">Theo dõi đầu sách và số lượng bản còn có thể mượn.</p></div><a class="button primary" href="{{ url_for('new_book') }}">Thêm sách <span>＋</span></a></div>
+  <div class="panel toolbar-panel"><form class="search-form" method="get"><span class="search-icon">⌕</span><input type="search" name="q" value="{{ q }}" placeholder="Tìm theo mã, tên sách, tác giả..."><button class="button secondary" type="submit">Tìm kiếm</button></form><span class="result-count">{{ books|length }} đầu sách</span></div>
+  <section class="panel table-panel">
+    {% if books %}<div class="table-wrap"><table><thead><tr><th>Mã sách</th><th>Tên sách</th><th>Tác giả</th><th>Thể loại</th><th>Tổng cuốn</th><th>Còn lại</th><th class="actions-heading">Thao tác</th></tr></thead><tbody>
+      {% for book in books %}<tr><td><span class="code-pill">{{ book.book_code }}</span></td><td class="primary-cell">{{ book.title }}{% if book.publication_year %}<small>{{ book.publication_year }}</small>{% endif %}</td><td>{{ book.author }}</td><td>{{ book.category }}</td><td>{{ book.total_quantity }}</td><td><span class="quantity {% if book.available_quantity == 0 %}empty{% endif %}">{{ book.available_quantity }}</span></td><td><div class="row-actions"><a class="icon-button" href="{{ url_for('edit_book', book_id=book.id) }}" aria-label="Sửa {{ book.title }}" title="Sửa">✎</a><form method="post" action="{{ url_for('delete_book', book_id=book.id) }}" onsubmit="return confirm('Xóa sách này? Nếu đã có lịch sử mượn, hệ thống sẽ giữ lại bản ghi.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-button danger-icon" type="submit" aria-label="Xóa {{ book.title }}" title="Xóa">×</button></form></div></td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<div class="empty-state"><span>▤</span><strong>Không tìm thấy sách</strong><p>Thử từ khóa khác hoặc thêm sách mới.</p></div>{% endif %}
+  </section>
+  <div class="floating-add"><a class="button primary" href="{{ url_for('new_book') }}">Thêm sách <span>＋</span></a></div>
+{% endblock %}
